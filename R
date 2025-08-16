@@ -1,3 +1,4 @@
+-- Fixed ant.txt content
 -- Код для формирования данных вебхука, безопасный для JSON-сериализации
 _G.WebhookDataCode = [[
     -- Шаблон для embeds
@@ -18,68 +19,41 @@ _G.WebhookDataCode = [[
     -- Футер для первого вебхука
     _G.embedFooter = {text = "Buy premium for 3M+ notifier!"}
 
-    -- Функция для стандартизированного парсинга строки модели
-    _G.parseModelString = function(modelStr)
-        local trimmed = modelStr:match("^%s*(.-)%s*$")
-        local displayName, generation, mutation, rarity = trimmed:match("(.+)%s+Generation:%s*([^%s]+)%s+Mutation:%s*([^%s]+)%s+Rarity:%s*(.+)")
-        
-        if displayName and generation and mutation and rarity then
-            return {
-                name = displayName:match("^%s*(.-)%s*$"), -- убираем лишние пробелы
-                generation = generation:match("^%s*(.-)%s*$"),
-                mutation = mutation:match("^%s*(.-)%s*$"),
-                rarity = rarity:match("^%s*(.-)%s*$")
-            }
-        end
-        return nil
-    end
-
     -- Функция для форматирования данных моделей для JSON
     _G.formatWebhookData = function(models, placeId, jobId, playerCount, maxPlayers)
-        local data = {
-            embeds = {{
-                title = "Nameless Pet Notifier",
-                color = 5814783,
-                fields = {
-                    {name = "👥 Players:", value = "", inline = true},
-                    {name = "🔗 Server Link:", value = "", inline = false},
-                    {name = "📱 Job-ID (Mobile):", value = "", inline = false},
-                    {name = "💻 Job-ID (PC):", value = "", inline = false},
-                    {name = "📲 Join:", value = "", inline = false}
-                }
-            }}
-        }
-        
+        local data = _G.embedTemplate
         local browserLink = "https://nameless-289z.onrender.com/join.html?placeId=" .. tostring(placeId) .. "&jobId=" .. tostring(jobId)
         local joinScript = 'game:GetService("TeleportService"):TeleportToPlaceInstance(' .. tostring(placeId) .. ',"' .. tostring(jobId) .. '",game.Players.LocalPlayer)'
 
-        -- Обновляем основные поля
+        -- Обновляем поля
         data.embeds[1].fields[1].value = tostring(playerCount) .. "/" .. tostring(maxPlayers)
         data.embeds[1].fields[2].value = "[Join Server](" .. browserLink .. ")"
         data.embeds[1].fields[3].value = tostring(jobId)
         data.embeds[1].fields[4].value = tostring(jobId)
         data.embeds[1].fields[5].value = "`" .. joinScript .. "`"
 
-        -- Парсим модели с использованием стандартизированной функции
-        local parsedModels = {}
-        for entry in models:gmatch("[^,]+") do
-            local parsed = _G.parseModelString(entry)
-            if parsed then
-                table.insert(parsedModels, parsed)
-            end
-        end
-
-        -- Собираем данные по категориям
+        -- Обрабатываем модели
         local names = {}
         local generations = {}
         local mutationCounts = {}
         local rarityCounts = {}
 
-        for _, model in ipairs(parsedModels) do
-            table.insert(names, model.name)
-            table.insert(generations, model.generation)
-            mutationCounts[model.mutation] = (mutationCounts[model.mutation] or 0) + 1
-            rarityCounts[model.rarity] = (rarityCounts[model.rarity] or 0) + 1
+        for entry in models:gmatch("[^,]+") do
+            local trimmed = entry:match("^%s*(.-)%s*$")
+            local parts = {}
+            for part in trimmed:gmatch("([^|]+)") do
+                table.insert(parts, part)
+            end
+            if #parts == 4 then
+                local displayName = parts[1]:match("^%s*(.-)%s*$")  -- Trim each part
+                local generation = parts[2]:match("^%s*(.-)%s*$")
+                local mutation = parts[3]:match("^%s*(.-)%s*$")
+                local rarity = parts[4]:match("^%s*(.-)%s*$")
+                table.insert(names, displayName)
+                table.insert(generations, generation or "Unknown")
+                mutationCounts[mutation] = (mutationCounts[mutation] or 0) + 1
+                rarityCounts[rarity] = (rarityCounts[rarity] or 0) + 1
+            end
         end
 
         -- Форматируем мутации и редкости
@@ -92,18 +66,12 @@ _G.WebhookDataCode = [[
             table.insert(formattedRarities, count > 1 and rarity .. " x" .. count or rarity)
         end
 
-        -- Добавляем поля моделей в правильном порядке (в начало списка полей)
+        -- Добавляем поля в начало, если есть данные
         if #names > 0 then
             table.insert(data.embeds[1].fields, 1, {name = "🪙 Name:", value = table.concat(names, ", "), inline = true})
         end
         if #generations > 0 then
             table.insert(data.embeds[1].fields, 2, {name = "📈 Generation:", value = table.concat(generations, ", "), inline = true})
-        end
-        if #formattedMutations > 0 then
-            table.insert(data.embeds[1].fields, 3, {name = "🧬 Mutation:", value = table.concat(formattedMutations, ", "), inline = true})
-        end
-        if #formattedRarities > 0 then
-            table.insert(data.embeds[1].fields, 4, {name = "💎 Rarity:", value = table.concat(formattedRarities, ", "), inline = true})
         end
 
         return data
